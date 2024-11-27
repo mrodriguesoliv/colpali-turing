@@ -1,54 +1,56 @@
 import os
 from dotenv import load_dotenv
+from openai import OpenAI
 import openai
 from tqdm.auto import tqdm
 from datasets import Dataset, load_dataset
 from huggingface_hub import login
 from collections import defaultdict
 from pydantic import BaseModel, ValidationError
-from PIL import Image
-import io
 
+# Habilitar a transferência do Hub do Hugging Face
 os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "1"
-load_dotenv()
 
+# Carregar variáveis de ambiente
+load_dotenv(dotenv_path='.env-local')
+
+# Configuração de autenticação
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 hub_token = os.getenv("HUGGING_FACE_TOKEN")
 
+print(f'testeee: {OPENAI_API_KEY}')
+
+# Login no Hugging Face
 login(token=hub_token)
 openai.api_key = OPENAI_API_KEY
 
+# Definindo um modelo de saída para validação
 class GPTOutput(BaseModel):
     input: str
     output: str
 
+# Carregar dataset
 dataset = load_dataset("mrodriguesoliv/colpali-turing")
 
+# Lista para armazenar os resultados
 briefings = []
 
-def pil_to_bytes(image: Image) -> bytes:
-    img_byte_arr = io.BytesIO()
-    image.save(img_byte_arr, format="JPEG")
-    return img_byte_arr.getvalue()
+print(dataset.keys())
+
+client = OpenAI()
 
 for row in tqdm(dataset["train"], desc="Processando imagens"):
     try:
-        
         image_path = row["image"]
-        
-        image = Image.open(image_path)
-        
-        image_data = pil_to_bytes(image)
 
         prompt = "Baseando-se na análise da imagem, descreva os principais elementos visuais e textuais em detalhes. Gere uma pergunta e uma resposta contextual para treinar modelos multimodais."
-    
-        response = openai.ChatCompletion.create(
-            model="gpt-4-vision",
+
+        response = client.chat.completions.create(
+            model="gpt-4-turbo",
             messages=[
                 {"role": "system", "content": "Você é um assistente que analisa imagens e gera inputs e outputs úteis para treinamento multimodal."},
                 {"role": "user", "content": prompt}
             ],
-            files=[{"file": ("imagem.jpg", image_data)}]
         )
 
         gpt_response = response["choices"][0]["message"]["content"]
@@ -58,6 +60,7 @@ for row in tqdm(dataset["train"], desc="Processando imagens"):
             output=gpt_response
         )
 
+        # Adicionar resultados à lista
         briefings.append({
             "image_path": image_path,
             "input": validated_output.input,
@@ -65,25 +68,28 @@ for row in tqdm(dataset["train"], desc="Processando imagens"):
         })
 
     except ValidationError as ve:
+        # Caso ocorra um erro de validação, adicionar o erro nos resultados
         briefings.append({
             "image_path": image_path,
-            "input": None,
+            "input": "Deu erro",
             "output": None,
             "error": str(ve)
         })
     except Exception as e:
+        # Caso ocorra qualquer outro erro, adicionar o erro nos resultados
         briefings.append({
             "image_path": image_path,
-            "input": None,
+            "input": "Deu erro",
             "output": None,
             "error": str(e)
-        })
+        })  
 
+# Organizar os dados para criar o dataset final
 columns = defaultdict(list)
 for briefing in briefings:
     for key, value in briefing.items():
         columns[key].append(value)
 
+# Criar dataset e enviar para o Hugging Face Hub
 result_dataset = Dataset.from_dict(columns)
-
 result_dataset.push_to_hub("colpali_gpt4v_briefings")

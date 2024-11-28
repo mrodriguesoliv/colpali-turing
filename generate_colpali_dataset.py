@@ -3,6 +3,8 @@ from openai import OpenAI
 import openai
 from dotenv import load_dotenv
 import os
+from datasets import Dataset
+import json
 
 
 load_dotenv(dotenv_path='.env-local')
@@ -18,6 +20,9 @@ def encode_image(image_path):
     return base64.b64encode(image_file.read()).decode('utf-8')
   
 image_folder_path = "/home/mrodriguesoliv/datasetcolpaliimage"
+
+# Lista para armazenar os dados gerados
+data = []
 
 for filename in os.listdir(image_folder_path):
 
@@ -39,25 +44,7 @@ for filename in os.listdir(image_folder_path):
                 "content": [
                     {
                     "type": "text",
-                    "text": "You are an assistant specialized in Multimodal RAG tasks. The task is the following: given an image from a pdf page, you will have to generate questions that can be asked by a user to retrieve information from a large documentary corpus. The question should be relevant to the page, and should not be too specific or too general. The question should be about the subject of the page, and the answer needs to be found in the page. Remember that the question is asked by a user to get some information from a large documentary corpus that contains multimodal data. Generate a question that could be asked by a user without knowing the existence and the content of the corpus. Generate as well the answer to the question, which should be found in the page. And the format of the answer should be a list of words answering the question.Generate at most THREE pairs of questions and answers per page as JSON with the following format, answer ONLY using JSON, NOTHING ELSE. Example:",
-                    "type": "text",
-                    "example": {
-                        "description": "Where XXXXXX is the question and ['YYYYYY'] is the corresponding list of answers that could be as long as needed.",
-                        "questions": [
-                            {
-                                "question": "XXXXXX",
-                                "answer": ["YYYYYY"]
-                            },
-                            {
-                                "question": "XXXXXX",
-                                "answer": ["YYYYYY"]
-                            },
-                            {
-                                "question": "XXXXXX",
-                                "answer": ["YYYYYY"]
-                            }
-                        ]
-                    }
+                    "text": "You are an assistant specialized in Multimodal RAG tasks. The task is the following: given an image from a pdf page, you will have to generate questions that can be asked by a user to retrieve information from a large documentary corpus. The question should be relevant to the page, and should not be too specific or too general. The question should be about the subject of the page, and the answer needs to be found in the page. Remember that the question is asked by a user to get some information from a large documentary corpus that contains multimodal data. Generate a question that could be asked by a user without knowing the existence and the content of the corpus. Generate as well the answer to the question, which should be found in the page. And the format of the answer should be a list of words answering the question.Generate at most THREE pairs of questions and answers per page as text. return a structured json, where each question is passed as question_x where x is the question number and the answer is passed as answer_x where x is the answer number, DO NOT RETURN ANYTHING OTHER THAN JSON. DO NOT RETURN ```JSON AT START. ANSWERS SHOULD NOT BE A LIST, THEY SHOULD BE A PHRASE, SENTENCE"
                     },
                     {
                     "type": "image_url",
@@ -70,8 +57,29 @@ for filename in os.listdir(image_folder_path):
             ],
             )
 
-            print(f'REPOSTA ESTÁ AQUI:')
-            print(response.choices[0])
+
+            gpt_output = response.choices[0].message.content
+
+            print(f'RESPOSTA: {gpt_output}')
+
+            gpt_output_json = json.loads(gpt_output)
+
+            data.append({
+                "OUTPUT_GPT_1": gpt_output_json.get('answer_2',''),
+                "OUTPUT_GPT_2": gpt_output_json.get('answer_2',''),
+                "OUTPUT_GPT_3": gpt_output_json.get('answer_3','')
+            })
 
         except Exception as e:
             print(f"Error processing {filename}: {e}")
+   
+
+dataset = Dataset.from_dict({
+    "OUTPUT_GPT_1": [item["OUTPUT_GPT_1"] for item in data],
+    "OUTPUT_GPT_2": [item["OUTPUT_GPT_2"] for item in data],
+    "OUTPUT_GPT_3": [item["OUTPUT_GPT_3"] for item in data],
+})            
+
+dataset.push_to_hub("gpt4v-briefings")
+
+print("Dados enviados para o Hugging Face com sucesso!")

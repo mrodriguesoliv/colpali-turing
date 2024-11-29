@@ -57,26 +57,30 @@ for filename in os.listdir(image_folder_path):
             ],
             )
 
+            gpt_response = response.choices[0].message.content
 
-            gpt_output = response.choices[0].message.content
+            print(f'RESPOSTA: {gpt_response}')
 
-            print(f'RESPOSTA: {gpt_output}')
-
-            gpt_output_json = json.loads(gpt_output)
+            gpt_response_json = json.loads(gpt_response)
 
             data.append({
-                "OUTPUT_GPT_1": gpt_output_json.get('answer_2',''),
-                "OUTPUT_GPT_2": gpt_output_json.get('answer_2',''),
-                "OUTPUT_GPT_3": gpt_output_json.get('answer_3','')
+                "INPUT_GPT_1": gpt_response_json.get("question_1",""),
+                "OUTPUT_GPT_1": gpt_response_json.get("answer_1",""),
+                "INPUT_GPT_2": gpt_response_json.get("question_2",""),
+                "OUTPUT_GPT_2": gpt_response_json.get("answer_2",""),
+                "INPUT_GPT_3": gpt_response_json.get("question_3",""),
+                "OUTPUT_GPT_3": gpt_response_json.get("answer_3","")
             })
-
+        
         except Exception as e:
             print(f"Error processing {filename}: {e}")
-   
 
 dataset = Dataset.from_dict({
+    "INPUT_GPT_1": [item["INPUT_GPT_1"] for item in data],
     "OUTPUT_GPT_1": [item["OUTPUT_GPT_1"] for item in data],
+    "INPUT_GPT_2": [item["INPUT_GPT_2"] for item in data],
     "OUTPUT_GPT_2": [item["OUTPUT_GPT_2"] for item in data],
+    "INPUT_GPT_3": [item["INPUT_GPT_3"] for item in data],
     "OUTPUT_GPT_3": [item["OUTPUT_GPT_3"] for item in data],
 })            
 
